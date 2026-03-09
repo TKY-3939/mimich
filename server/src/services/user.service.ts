@@ -21,17 +21,16 @@ import { getPreferences, getPreferencesPartial, mergePreferences } from 'src/uti
 @Injectable()
 export class UserService extends BaseService {
   async search(auth: AuthDto): Promise<UserResponseDto[]> {
-    const config = await this.getConfig({ withCache: false });
-
-    let users;
-    if (auth.user.isAdmin || config.server.publicUsers) {
-      users = await this.userRepository.getList({ withDeleted: false });
-    } else {
-      const authUser = await this.userRepository.get(auth.user.id, {});
-      users = authUser ? [authUser] : [];
+    // STRICT MODE: Non-admin users ONLY see themselves
+    // This ensures complete user isolation
+    if (auth.user.isAdmin) {
+      const users = await this.userRepository.getList({ withDeleted: false });
+      return users.map((user) => mapUser(user));
     }
 
-    return users.map((user) => mapUser(user));
+    // Non-admin: ONLY return the authenticated user's own profile
+    const authUser = await this.userRepository.get(auth.user.id, {});
+    return authUser ? [mapUser(authUser)] : [];
   }
 
   async getMe(auth: AuthDto): Promise<UserAdminResponseDto> {
