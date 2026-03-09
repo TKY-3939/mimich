@@ -85,7 +85,24 @@ export class UserService extends BaseService {
     return mapPreferences(updated);
   }
 
-  async get(id: string): Promise<UserResponseDto> {
+  async get(auth: AuthDto, id: string): Promise<UserResponseDto> {
+    const config = await this.getConfig({ withCache: false });
+
+    // If public users is enabled or user is admin, allow access to any user
+    if (!auth.user.isAdmin && !config.server.publicUsers) {
+      // Non-admin with publicUsers disabled: only allow access to own profile
+      // or users connected via partner sharing
+      if (auth.user.id !== id) {
+        const partners = await this.partnerRepository.getAll(auth.user.id);
+        const partnerIds = new Set(
+          partners.map((p) => (p.sharedById === auth.user.id ? p.sharedWithId : p.sharedById)),
+        );
+        if (!partnerIds.has(id)) {
+          throw new BadRequestException('User not found');
+        }
+      }
+    }
+
     const user = await this.findOrFail(id, { withDeleted: false });
     return mapUser(user);
   }
